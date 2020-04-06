@@ -40,22 +40,41 @@ rent = rent[['Print Key', 'Address', 'License Status', 'Issued Datetime', 'Expir
 rent = rent[rent['License Status']=='Active']
 rent['NUMBER'] = rent['Address'].apply(lambda x: str(x).split(' ')[0])
 rent['STREET'] = rent['Address'].apply(lambda x: ' '.join(str(x).split(' ')[1:]))
-rent.rename(columns={'License Status':'STATUS','Issued Datetime':'ISSUED','Expiration Datetime':'EXPIRES','Print Key':'SBL','Address':'ADDRESS'},inplace=True)
+rent.rename(columns={'License Status':'STATUS','Issued Datetime':'ISSUED','Expiration Datetime':'EXPIRES','Print Key':'SBL','Address':'ADDRESS'},\
+            inplace=True)
 rent['ISSUED'] = pd.to_datetime(rent['ISSUED'])
 rent['EXPIRES'] = pd.to_datetime(rent['EXPIRES'])
 rent['IS_RENTAL'] = int(1)
 
 
+# JOIN RENTAL REGISTRY AND VIOLATIONS
+## TODO: WHY IS df[df['SBL']=='100.54-3-9./205'] IN THERE 20 TIMES, SHOULD BE 4?
 years = years.assign(key=1)
 asmt = asmt.assign(key=1)
-
+# duplicate asmt dataframe for each year
 df = asmt.merge(years, on='key',how='inner').drop(columns=['key','ADDRESS'])
-##df = df.sort_values(['YEAR','NUMBER','STREET'], ascending=True).reset_index(drop=True)
-
+# asmt <- rental (on number and street as keys)
+# note: this assumes every residence on the rental registry has been always been a rental,
+# back to the start of the analysis period
 df = df.merge(rent[['NUMBER','STREET','IS_RENTAL']], on=['NUMBER','STREET'], how='left')
 df['IS_RENTAL'].fillna(0, inplace=True)
-
+# asmt+rental <- vios (on number, street, and year, as keys)
 df = df.merge(vios, on=['NUMBER','STREET','YEAR'], how='left')
 df['VIOLATIONS'].fillna(0, inplace=True)
-
+# sort dataframe (which now is asmt*year+rental+viols) to get same properties together, and reset index
 df = df.sort_values(['YEAR','NUMBER','STREET'], ascending=True).reset_index(drop=True)
+
+
+# EXPLORATORY ANALYSIS
+# in each neighborhood, what percent of residences (zoned 400 SBLs) are on the rental registry? 
+pt1 = pd.pivot_table(df[(df['YEAR']=='2019') & (df['PROP_TYPE'].apply(lambda x: x[0])=='4')],\
+                        index='NBHD',columns='YEAR', values=['SBL','IS_RENTAL'], aggfunc={'SBL':(lambda x: len(x.dropna().unique())),'IS_RENTAL':sum})
+pt1['PCT'] = pt1['IS_RENTAL']/pt1['SBL']
+pt1.rename(columns={'SBL':'HOUSES'},inplace=True)
+pt1.sort_values('PCT',ascending=False,inplace=True)
+
+# in each neighborhood, who gets more citations
+pt2 = df[(df['PROP_TYPE'].apply(lambda x: x[0])=='4')]
+pt2 = pt2[['SBL','NBHD','IS_RENTAL','VIOLATIONS']]
+pt2 = pd.pivot_table(pt2, index=['NBHD', 'SBL'], values=['VIOLATIONS','IS_RENTAL'], aggfunc={'IS_RENTAL':sum,'VIOLATIONS':sum}).reset_index()
+
