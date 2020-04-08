@@ -95,17 +95,21 @@ alt_pt2 = pt2.drop(columns=['VIOS_RAW','NO_VIOS_RAW'])\
     .melt(id_vars=['NBHD','IS_RENTAL'])
 alt_pt2
 
-chart = alt.Chart(alt_pt2[['NBHD','IS_RENTAL','value','variable']]).mark_bar().encode(
-    x=alt.X('IS_RENTAL', sort=['YES','NO']),
-    y='sum(value):Q',
-    color='variable',
-    column='NBHD:N',
-    order=alt.Order('variable')
-)
-chart.save('chart.html')
+charts = {}
+
+for nbhd in alt_pt2['NBHD'].unique():
+    tmp = alt_pt2[alt_pt2['NBHD']==nbhd]
+    chart = alt.Chart(tmp[['NBHD','IS_RENTAL','value','variable']]).mark_bar().encode(
+        x=alt.X('IS_RENTAL', sort=['YES','NO']),
+        y='sum(value):Q',
+        color='variable',
+        column='NBHD:N',
+        order=alt.Order('variable')
+    )
+    charts.update({nbhd:chart})
 
 # maps
 geojson = os.path.join('data','Neighborhoods.geojson')
-nbhd = folium.Map([42.886416, -78.878177], title='OpenStreetMap', zoom_start = 11)
-
-nbhd.save('nbhd.html')
+m = folium.Map([42.900155, -78.8485], zoom_start=12)
+folium.GeoJson(geojson, tooltip = folium.GeoJsonTooltip(fields=['nbhdname'],labels = False,localize=True)).add_to(m)
+m.save('nbhd.html')
